@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "files": {},
+  "relations": [
+    {
+      "source": "architecture/benchmark-design.doc.md",
+      "target": "methodology/benchmark-methodology.spec.md",
+      "type": "related"
+    },
+    {
+      "source": "methodology/benchmark-methodology.spec.md",
+      "target": "methodology/realistic-cost-metric.adr.md",
+      "type": "related"
+    },
+    {
+      "source": "methodology/benchmark-methodology.spec.md",
+      "target": "methodology/analysis-pipeline.doc.md",
+      "type": "related"
+    },
+    {
+      "source": "findings/benchmark-results-v1.doc.md",
+      "target": "methodology/benchmark-methodology.spec.md",
+      "type": "related"
+    },
+    {
+      "source": "findings/benchmark-results-v1.doc.md",
+      "target": "methodology/realistic-cost-metric.adr.md",
+      "type": "related"
+    },
+    {
+      "source": "findings/plugin-benchmark-v2.doc.md",
+      "target": "findings/benchmark-results-v1.doc.md",
+      "type": "extends"
+    },
+    {
+      "source": "findings/plugin-benchmark-v2.doc.md",
+      "target": "methodology/benchmark-methodology.spec.md",
+      "type": "related"
+    },
+    {
+      "source": "findings/plugin-benchmark-v2.doc.md",
+      "target": "architecture/benchmark-design.doc.md",
+      "type": "related"
+    },
+    {
+      "source": "findings/plugin-pilot-v1.doc.md",
+      "target": "findings/plugin-benchmark-v2.doc.md",
+      "type": "related"
+    },
+    {
+      "source": "findings/plugin-pilot-v1.doc.md",
+      "target": "findings/benchmark-results-v1.doc.md",
+      "type": "related"
+    }
+  ]
+}

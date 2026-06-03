@@ -1,0 +1,20 @@
+000	According to the project's documented conventions, what is the exact middleware registration group id for request id propagation? Reply with only the value, nothing else.	mwg_71hf
+004	According to the project's documented conventions, what is the exact build tag for table driven test layout? Reply with only the value, nothing else.	tag_1zcy
+008	According to the project's documented conventions, what is the exact structured log field key for structured field naming? Reply with only the value, nothing else.	fld_65o6
+012	According to the project's documented conventions, what is the exact sentinel error identifier for HTTP status mapping? Reply with only the value, nothing else.	ErrC42E
+016	According to the project's documented conventions, what is the exact route mount prefix for path parameter parsing? Reply with only the value, nothing else.	/rth4ay
+020	According to the project's documented conventions, what is the exact middleware registration group id for request body size limit? Reply with only the value, nothing else.	mwg_ph4d
+024	According to the project's documented conventions, what is the exact build tag for shared test fixtures? Reply with only the value, nothing else.	tag_rpne
+028	According to the project's documented conventions, what is the exact structured log field key for high volume log sampling? Reply with only the value, nothing else.	fld_txgz
+032	According to the project's documented conventions, what is the exact sentinel error identifier for client versus server errors? Reply with only the value, nothing else.	ErrWBW6
+036	According to the project's documented conventions, what is the exact route mount prefix for static asset serving? Reply with only the value, nothing else.	/rt7njf
+040	According to the project's documented conventions, what is the exact middleware registration group id for real client IP resolution? Reply with only the value, nothing else.	mwg_gxrd
+044	According to the project's documented conventions, what is the exact build tag for interface mock generation? Reply with only the value, nothing else.	tag_l1ze
+048	According to the project's documented conventions, what is the exact structured log field key for slow dependency logging? Reply with only the value, nothing else.	fld_vdy8
+052	According to the project's documented conventions, what is the exact sentinel error identifier for upstream timeout errors? Reply with only the value, nothing else.	Err363P
+056	According to the project's documented conventions, what is the exact route mount prefix for host based routing? Reply with only the value, nothing else.	/rtf4sz
+060	According to the project's documented conventions, what is the exact middleware registration group id for trace span injection? Reply with only the value, nothing else.	mwg_3ao0
+064	According to the project's documented conventions, what is the exact build tag for flaky test quarantine? Reply with only the value, nothing else.	tag_y3k3
+068	According to the project's documented conventions, what is the exact structured log field key for log shipping destination? Reply with only the value, nothing else.	fld_p7f2
+072	According to the project's documented conventions, what is the exact sentinel error identifier for error event logging? Reply with only the value, nothing else.	ErrTK40
+076	According to the project's documented conventions, what is the exact route mount prefix for websocket upgrade handling? Reply with only the value, nothing else.	/rtiasy

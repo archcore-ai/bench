@@ -1,0 +1,268 @@
+{
+  "description": "Batch task groups for plugin benchmark (Phase 2). Domain \u00d7 {1,2,4,8} questions.",
+  "domains": [
+    "middleware",
+    "routing",
+    "errors",
+    "logging",
+    "testing"
+  ],
+  "batch_sizes": [
+    1,
+    2,
+    4,
+    8
+  ],
+  "tasks": {
+    "middleware": [
+      {
+        "doc_id": "000",
+        "question": "According to the project's documented conventions, what is the exact middleware registration group id for request id propagation? Reply with only the value, nothing else.",
+        "answer_token": "mwg_71hf",
+        "search_term": "request id propagation"
+      },
+      {
+        "doc_id": "005",
+        "question": "According to the project's documented conventions, what is the exact middleware registration group id for panic recovery? Reply with only the value, nothing else.",
+        "answer_token": "mwg_qesh",
+        "search_term": "panic recovery"
+      },
+      {
+        "doc_id": "010",
+        "question": "According to the project's documented conventions, what is the exact middleware registration group id for CORS preflight handling? Reply with only the value, nothing else.",
+        "answer_token": "mwg_ty7o",
+        "search_term": "CORS preflight handling"
+      },
+      {
+        "doc_id": "015",
+        "question": "According to the project's documented conventions, what is the exact middleware registration group id for gzip response compression? Reply with only the value, nothing else.",
+        "answer_token": "mwg_anmd",
+        "search_term": "gzip response compression"
+      },
+      {
+        "doc_id": "020",
+        "question": "According to the project's documented conventions, what is the exact middleware registration group id for request body size limit? Reply with only the value, nothing else.",
+        "answer_token": "mwg_ph4d",
+        "search_term": "request body size limit"
+      },
+      {
+        "doc_id": "025",
+        "question": "According to the project's documented conventions, what is the exact middleware registration group id for auth token extraction? Reply with only the value, nothing else.",
+        "answer_token": "mwg_8wv5",
+        "search_term": "auth token extraction"
+      },
+      {
+        "doc_id": "030",
+        "question": "According to the project's documented conventions, what is the exact middleware registration group id for rate limiting? Reply with only the value, nothing else.",
+        "answer_token": "mwg_l7ir",
+        "search_term": "rate limiting"
+      },
+      {
+        "doc_id": "035",
+        "question": "According to the project's documented conventions, what is the exact middleware registration group id for per request timeout budget? Reply with only the value, nothing else.",
+        "answer_token": "mwg_0kv1",
+        "search_term": "per request timeout budget"
+      }
+    ],
+    "routing": [
+      {
+        "doc_id": "001",
+        "question": "According to the project's documented conventions, what is the exact route mount prefix for health check endpoints? Reply with only the value, nothing else.",
+        "answer_token": "/rte86y",
+        "search_term": "health check endpoints"
+      },
+      {
+        "doc_id": "006",
+        "question": "According to the project's documented conventions, what is the exact route mount prefix for API version namespacing? Reply with only the value, nothing else.",
+        "answer_token": "/rt0arl",
+        "search_term": "API version namespacing"
+      },
+      {
+        "doc_id": "011",
+        "question": "According to the project's documented conventions, what is the exact route mount prefix for route group composition? Reply with only the value, nothing else.",
+        "answer_token": "/rt5zin",
+        "search_term": "route group composition"
+      },
+      {
+        "doc_id": "016",
+        "question": "According to the project's documented conventions, what is the exact route mount prefix for path parameter parsing? Reply with only the value, nothing else.",
+        "answer_token": "/rth4ay",
+        "search_term": "path parameter parsing"
+      },
+      {
+        "doc_id": "021",
+        "question": "According to the project's documented conventions, what is the exact route mount prefix for trailing slash normalization? Reply with only the value, nothing else.",
+        "answer_token": "/rtkdvp",
+        "search_term": "trailing slash normalization"
+      },
+      {
+        "doc_id": "026",
+        "question": "According to the project's documented conventions, what is the exact route mount prefix for method not allowed handling? Reply with only the value, nothing else.",
+        "answer_token": "/rt379a",
+        "search_term": "method not allowed handling"
+      },
+      {
+        "doc_id": "031",
+        "question": "According to the project's documented conventions, what is the exact route mount prefix for subrouter mounting? Reply with only the value, nothing else.",
+        "answer_token": "/rtat0g",
+        "search_term": "subrouter mounting"
+      },
+      {
+        "doc_id": "036",
+        "question": "According to the project's documented conventions, what is the exact route mount prefix for static asset serving? Reply with only the value, nothing else.",
+        "answer_token": "/rt7njf",
+        "search_term": "static asset serving"
+      }
+    ],
+    "errors": [
+      {
+        "doc_id": "002",
+        "question": "According to the project's documented conventions, what is the exact sentinel error identifier for sentinel error definitions? Reply with only the value, nothing else.",
+        "answer_token": "Err5R21",
+        "search_term": "sentinel error definitions"
+      },
+      {
+        "doc_id": "007",
+        "question": "According to the project's documented conventions, what is the exact sentinel error identifier for error wrapping chains? Reply with only the value, nothing else.",
+        "answer_token": "ErrH9DL",
+        "search_term": "error wrapping chains"
+      },
+      {
+        "doc_id": "012",
+        "question": "According to the project's documented conventions, what is the exact sentinel error identifier for HTTP status mapping? Reply with only the value, nothing else.",
+        "answer_token": "ErrC42E",
+        "search_term": "HTTP status mapping"
+      },
+      {
+        "doc_id": "017",
+        "question": "According to the project's documented conventions, what is the exact sentinel error identifier for request validation errors? Reply with only the value, nothing else.",
+        "answer_token": "ErrFATO",
+        "search_term": "request validation errors"
+      },
+      {
+        "doc_id": "022",
+        "question": "According to the project's documented conventions, what is the exact sentinel error identifier for panic to error conversion? Reply with only the value, nothing else.",
+        "answer_token": "ErrT9G8",
+        "search_term": "panic to error conversion"
+      },
+      {
+        "doc_id": "027",
+        "question": "According to the project's documented conventions, what is the exact sentinel error identifier for error response envelope? Reply with only the value, nothing else.",
+        "answer_token": "ErrR4OO",
+        "search_term": "error response envelope"
+      },
+      {
+        "doc_id": "032",
+        "question": "According to the project's documented conventions, what is the exact sentinel error identifier for client versus server errors? Reply with only the value, nothing else.",
+        "answer_token": "ErrWBW6",
+        "search_term": "client versus server errors"
+      },
+      {
+        "doc_id": "037",
+        "question": "According to the project's documented conventions, what is the exact sentinel error identifier for retryable error classification? Reply with only the value, nothing else.",
+        "answer_token": "Err3F55",
+        "search_term": "retryable error classification"
+      }
+    ],
+    "logging": [
+      {
+        "doc_id": "003",
+        "question": "According to the project's documented conventions, what is the exact structured log field key for log level policy? Reply with only the value, nothing else.",
+        "answer_token": "fld_5dew",
+        "search_term": "log level policy"
+      },
+      {
+        "doc_id": "008",
+        "question": "According to the project's documented conventions, what is the exact structured log field key for structured field naming? Reply with only the value, nothing else.",
+        "answer_token": "fld_65o6",
+        "search_term": "structured field naming"
+      },
+      {
+        "doc_id": "013",
+        "question": "According to the project's documented conventions, what is the exact structured log field key for correlation id logging? Reply with only the value, nothing else.",
+        "answer_token": "fld_i5e6",
+        "search_term": "correlation id logging"
+      },
+      {
+        "doc_id": "018",
+        "question": "According to the project's documented conventions, what is the exact structured log field key for request access logging? Reply with only the value, nothing else.",
+        "answer_token": "fld_hzek",
+        "search_term": "request access logging"
+      },
+      {
+        "doc_id": "023",
+        "question": "According to the project's documented conventions, what is the exact structured log field key for sensitive data redaction? Reply with only the value, nothing else.",
+        "answer_token": "fld_fzyg",
+        "search_term": "sensitive data redaction"
+      },
+      {
+        "doc_id": "028",
+        "question": "According to the project's documented conventions, what is the exact structured log field key for high volume log sampling? Reply with only the value, nothing else.",
+        "answer_token": "fld_txgz",
+        "search_term": "high volume log sampling"
+      },
+      {
+        "doc_id": "033",
+        "question": "According to the project's documented conventions, what is the exact structured log field key for security audit logging? Reply with only the value, nothing else.",
+        "answer_token": "fld_jwc9",
+        "search_term": "security audit logging"
+      },
+      {
+        "doc_id": "038",
+        "question": "According to the project's documented conventions, what is the exact structured log field key for log serialization format? Reply with only the value, nothing else.",
+        "answer_token": "fld_v4y8",
+        "search_term": "log serialization format"
+      }
+    ],
+    "testing": [
+      {
+        "doc_id": "004",
+        "question": "According to the project's documented conventions, what is the exact build tag for table driven test layout? Reply with only the value, nothing else.",
+        "answer_token": "tag_1zcy",
+        "search_term": "table driven test layout"
+      },
+      {
+        "doc_id": "009",
+        "question": "According to the project's documented conventions, what is the exact build tag for integration build tagging? Reply with only the value, nothing else.",
+        "answer_token": "tag_mmg2",
+        "search_term": "integration build tagging"
+      },
+      {
+        "doc_id": "014",
+        "question": "According to the project's documented conventions, what is the exact build tag for golden file fixtures? Reply with only the value, nothing else.",
+        "answer_token": "tag_ohtn",
+        "search_term": "golden file fixtures"
+      },
+      {
+        "doc_id": "019",
+        "question": "According to the project's documented conventions, what is the exact build tag for httptest server usage? Reply with only the value, nothing else.",
+        "answer_token": "tag_3e2k",
+        "search_term": "httptest server usage"
+      },
+      {
+        "doc_id": "024",
+        "question": "According to the project's documented conventions, what is the exact build tag for shared test fixtures? Reply with only the value, nothing else.",
+        "answer_token": "tag_rpne",
+        "search_term": "shared test fixtures"
+      },
+      {
+        "doc_id": "029",
+        "question": "According to the project's documented conventions, what is the exact build tag for race detector policy? Reply with only the value, nothing else.",
+        "answer_token": "tag_07yh",
+        "search_term": "race detector policy"
+      },
+      {
+        "doc_id": "034",
+        "question": "According to the project's documented conventions, what is the exact build tag for coverage threshold gate? Reply with only the value, nothing else.",
+        "answer_token": "tag_nayx",
+        "search_term": "coverage threshold gate"
+      },
+      {
+        "doc_id": "039",
+        "question": "According to the project's documented conventions, what is the exact build tag for slow test gating? Reply with only the value, nothing else.",
+        "answer_token": "tag_8uza",
+        "search_term": "slow test gating"
+      }
+    ]
+  }
+}
