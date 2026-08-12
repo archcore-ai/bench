@@ -1,85 +1,100 @@
-# Archcore benchmark — token savings, reproducibly measured
+# Archcore benchmark — token cost, reproducibly measured
 
-Reproducible measurement of whether Archcore saves tokens for an AI coding agent at a **fixed
-quality bar**, against realistic baselines. Two tools are measured: the **CLI** (Archcore as an
-MCP server) and the **Plugin** (Claude Code integration with `/archcore:context`).
+Reproducible measurement of what Archcore costs an AI coding agent at a **fixed quality bar**,
+against realistic baselines. Two tools are measured: the **CLI** (Archcore as an MCP server)
+and the **Plugin** (Claude Code integration).
+
+**Current run: 2026-08-12** — archcore CLI v0.7.0, plugin v0.7.1, Claude Code 2.1.228,
+model sonnet-5. 425 measurements. The previous run (2026-05-31, archcore v0.3.6) is kept
+alongside so every number can be compared across versions.
 
 ---
 
-## Part 1 — What Archcore saves you
+## Part 1 — What the benchmark actually shows
 
-### CLI: stable retrieval cost at any knowledge base size
+### The finding: Archcore's cost is flat, and it is the only arm without a tail
 
-As a knowledge base grows, Archcore's per-task cost stays flat. Loading everything into
-`CLAUDE.md` grows linearly. The gap widens without bound.
+Across all 25 crossover runs, Archcore used **exactly 3 turns and 143–146k context tokens** —
+at every knowledge-base size from 1 to 320 documents. No other retrieval arm is stable.
 
 ```
-Per-task cost as the KB grows:
+Per-task cost as the KB grows (cold $, median):
 
-CLAUDE.md preload  ▏$0.10  →  ▍$0.24  →  █████ $0.68    grows linearly
-archcore (CLI)     ▎$0.13  →  ▎$0.13  →  ▎$0.13          flat — independent of KB size
-files + grep       ▎$0.10  →  ▎$0.12  →  ▎$0.11          also flat and comparable
-                    1 doc       80 docs     320 docs
+CLAUDE.md preload  ▎$0.14  →  ▌$0.29  →  ███ $0.78     grows linearly
+archcore (CLI)     █▊$0.43 →  █▊$0.44 →  █▊$0.44       flat — independent of KB size
+files + grep       ▊$0.17  →  ▊$0.18  →  █████ $1.35   flat, then falls apart
+                     1 doc     80 docs     320 docs
 ```
 
-**Crossover table — realistic per-task cost ($), all arms at equal quality:**
+**Crossover table — cost per task at equal quality (100% pass rate on every passing arm):**
 
 | KB size | CLAUDE.md preload | files + index | files + grep | **Archcore CLI** |
 |---------|-------------------|---------------|--------------|------------------|
-| 1 doc   | **0.102**         | 0.111         | 0.103        | 0.127            |
-| 20 docs | 0.134             | **0.113**     | 0.121        | 0.127            |
-| 80 docs | 0.238             | **0.119**     | 0.123        | 0.127            |
-| 160 docs| 0.386             | 0.130         | **0.124**    | 0.127            |
-| 320 docs| 0.681             | 0.152         | **0.112**    | 0.127            |
+| 1 doc   | **0.139**         | 0.569         | 0.174        | 0.434            |
+| 20 docs | **0.175**         | 0.427         | 0.177        | 0.434            |
+| 80 docs | 0.290             | 0.297         | **0.184**    | 0.441            |
+| 160 docs| 0.455             | 0.648         | 1.298        | **0.441**        |
+| 320 docs| 0.784             | 0.741         | 1.350        | **0.435**        |
 
-**At ~27 documents**, Archcore becomes cheaper than `CLAUDE.md` preload. At 320 documents it is
-**4.6× cheaper** ($0.127 vs $0.681). Archcore is at **rough parity with "files + grep"** across
-the range — the two are within a few percent of each other at any KB size.
+*(cold metric — no turn-model assumptions. Under the realistic metric the ranking is the same
+but preload crosses much earlier; see [`ANALYSIS.md`](ANALYSIS.md) §2.4 for both.)*
 
-All arms answer every task correctly (100% pass rate, 305 measurements).
+Archcore overtakes `CLAUDE.md` preload at **~100–150 documents** and the grep baselines at
+**~90–110**. Below that, the baselines are cheaper — plainly so at small KB sizes.
 
----
+### Where the real difference shows up: the tail
 
-### Plugin: amortized sessions
+On the 20-task workload suite at 80 documents (60 measurements per arm):
 
-The Archcore Plugin adds `/archcore:context` to Claude Code. When an agent loads an area's context
-once at the start of a session, the fixed overhead (MCP schemas, system prompt, codebase context)
-is paid once and shared across every question in that session.
+| Arm | median $ | **mean $** | max $ | runs >2× median |
+|-----|----------|------------|-------|-----------------|
+| files + grep | **0.178** | 0.608 | 2.400 | **22/60** |
+| files + index | 0.597 | 0.607 | 1.224 | 1/60 |
+| **Archcore CLI** | 0.437 | **0.470** | 0.635 | **0/60** |
 
-**Per-question cost vs. number of questions per session:**
+**By median, blind grep is 2.5× cheaper than Archcore. By mean, Archcore is 23% cheaper than
+both baselines.** Both are true, of the same 60 runs. Grep resolves in one turn 65% of the time
+and spirals into 400k+ tokens the other 35%; Archcore never spiraled once.
 
-| Questions / session | Plugin cost / question | vs. one-call-per-question |
-|---------------------|------------------------|---------------------------|
-| 1                   | $0.163                 | −29%*                     |
-| 2                   | $0.075                 | −41%                      |
-| **4**               | **$0.032**             | **−74%**                  |
-| 8                   | $0.015                 | −88%                      |
+Full suite cost: **Archcore $9.40** vs files+index $12.14 vs files+grep $12.17.
 
-*Baseline = CLI separate calls at $0.127/question.
-**A single-question Plugin session is 29% more expensive than a single CLI call** — the fixed
-overhead is not yet amortized. The break-even is at ~2 questions per session.
+Same shape in latency: Archcore 8.8 s mean (max 16.5 s), grep 16.3 s mean (max **93 s**).
 
-**Full workload equivalent** — 20 tasks organized as 5 domain sessions of 4 questions each:
+### An honest caveat about this run
 
-| Strategy | Total cost | vs. 20 separate CLI calls |
-|----------|-----------|---------------------------|
-| 20 × CLI (separate calls) | $2.54 | baseline |
-| Plugin batch (5 sessions × 4q) | **$0.649** | **−74%** |
+In the previous run Archcore was the **most expensive** arm on this suite. The ranking flipped
+because Claude Code 2.1.228 regressed `Grep`/`Read` on large knowledge bases — the baselines
+got 2.4–3.5× more expensive. **Archcore's own cost did not move** (142k → 144k tokens).
+This is a baseline regression, not an Archcore improvement, and it means these cross-arm
+numbers are valid for a stated host version only.
 
-5 domains × 4 questions = the same 20-task suite, batched by area. 100% pass rate. 120 measurements across 3 trials, 5 domains, all batch sizes.
+### Plugin: cost-neutral for retrieval
 
----
+Plugin v0.7 removed `/archcore:context`. Session context now arrives via a SessionStart hook —
+a ~150-token corpus header (document counts, tags, tool pointer), no document bodies.
+
+Measured plugin-on vs plugin-off at four batch sizes, 120 runs: **identical turn counts, paired
+wins at chance level, context delta within noise.** The plugin does not change retrieval cost.
+
+What *does* save money is batching questions into one session — and that works with or without
+the plugin:
+
+| Questions per session | cost per question | vs 1/session |
+|---|---|---|
+| 1 | $0.461 | baseline |
+| 4 | $0.132 | −71% |
+| 8 | $0.074 | **−84%** |
 
 ### When to use which
 
 | Scenario | What to use |
 |---|---|
-| Script or one-off lookup | CLI (separate `claude -p` per question) |
-| Interactive session, 2–3 questions about one area | Either — Plugin break-even is ~N=2 |
-| Interactive session, 4+ questions about one area | **Plugin** — 74% cheaper per question |
-| KB growing beyond ~30 docs | CLI beats `CLAUDE.md` preload; cost stays flat |
-| Replacing a large `CLAUDE.md` | CLI — 4.6× cheaper at 320 docs |
-| Need consistent, predictable cost | Plugin — 12× tighter cost variance at N=4 |
+| KB under ~50 docs | grep or preload — cheaper, and Archcore's flat cost has nothing to amortise yet |
+| KB beyond ~100–150 docs | **Archcore** — preload and grep both overtake it |
+| Predictable cost matters more than the median | **Archcore** — 0/60 tail events vs 22/60 for grep |
+| Latency matters | **Archcore** — 8.8 s mean vs 93 s worst case for grep |
+| Several questions about one area | Batch them into one session — −71% at 4, −84% at 8 |
+| Choosing the plugin for cheaper retrieval | Don't — it is cost-neutral. Use it for `document`/`plan`/`review` |
 
 ---
 
@@ -88,8 +103,8 @@ overhead is not yet amortized. The break-even is at ~2 questions per session.
 ### Prerequisites
 
 ```bash
-archcore --version   # v0.4.x — install: https://archcore.ai
-claude --version     # 2.x   — install: https://claude.ai/code
+archcore --version   # v0.7.x — install: https://archcore.ai
+claude --version     # 2.1.x  — install: https://claude.ai/code
 python3 --version    # 3.9+
 jq --version         # any recent version
 ```
@@ -107,8 +122,6 @@ arm directories. Safe to re-run — skips steps already done.
 
 ### 2. Sanity check (2 min)
 
-Runs 3 arms on a single task and 1-doc KB to verify the measurement harness:
-
 ```bash
 bash harness/bench.sh
 column -t -s, results/results.csv
@@ -116,37 +129,35 @@ column -t -s, results/results.csv
 
 Token counts are exact, from `claude -p --output-format json` `.usage` (not estimates).
 
-### 3. Full CLI benchmark (~90 min)
-
-Sweeps KB size and runs the 20-task workload suite. Regenerates the numbers in Part 1.
+### 3. Full CLI benchmark (~2 h)
 
 ```bash
 cd scale
-python3 gen_kb.py                        # generates 320-doc synthetic KB + facts.csv
-bash run.sh all                          # crossover (N sweep) + workload (20-task suite)
-python3 analyze.py results/results.csv   # prints crossover + workload tables
+python3 gen_kb.py                                              # 320-doc synthetic KB + facts.csv
+MAXTURNS=20 CSV=$PWD/results/results_v2.csv bash run.sh all     # crossover + workload, 305 runs
+python3 analyze_v2.py results/results_v2.csv results/results_v1.csv
 ```
 
-Knobs: `MODEL` (default `sonnet`), `XTRIALS` (5), `WTRIALS` (3), `XSIZES` (`1 20 80 160 320`).
-Raw per-run data: `scale/results/results.csv` (15-column CSV with exact API token counts).
+Knobs: `MODEL` (default `sonnet`), `XTRIALS` (5), `WTRIALS` (3), `XSIZES` (`1 20 80 160 320`),
+`MAXTURNS` (**use 20** — at 12 the blind-grep arm gets truncated and looks better than it is).
 
-### 4. Plugin benchmark (~60 min)
+### 4. Plugin benchmark (~50 min)
 
 Requires the [Archcore Plugin](https://github.com/archcore-ai/plugin):
 
 ```bash
 git clone https://github.com/archcore-ai/plugin /path/to/plugin
-PLUGIN=/path/to/plugin bash scale/run_plugin.sh
+PLUGIN=/path/to/plugin bash scale/run_plugin_v7.sh
 ```
 
-The scale arms at N=80 must exist first (run step 3 or at minimum `bash scale/run.sh crossover`
-with `XSIZES=80`). For a quick smoke test (one trial, two batch sizes, one domain):
+The driver resolves both plugin layouts (v0.7 `plugins/archcore/`, and the pre-0.7 repo root)
+and builds its own v0.7-conformant arm at N=80. Quick smoke test:
 
 ```bash
-PLUGIN=/path/to/plugin TRIALS=1 BATCH_SIZES="1 4" DOMAINS="middleware" bash scale/run_plugin.sh
+PLUGIN=/path/to/plugin TRIALS=1 BATCH_SIZES="1 4" DOMAINS="middleware" bash scale/run_plugin_v7.sh
 ```
 
-Results: `scale/results/plugin_results.csv`.
+Results: `scale/results/plugin_results_v7.csv`.
 
 ### Reading results
 
@@ -154,20 +165,20 @@ Both CSVs use the same key columns:
 
 | Column | Meaning |
 |---|---|
-| `total_cost_usd` | Actual billed cost (warm — lower bound) |
+| `total_cost_usd` | Actual billed cost (warm — order-dependent, cache-discounted) |
 | `input_tokens` | Fresh input tokens this session |
 | `cache_creation` | Tokens written to prompt cache |
 | `cache_read` | Tokens read from prompt cache |
 | `num_turns` | Tool-use turns in this `claude -p` call |
 | `pass` / `pass_rate` | 1 = correct answer retrieved, 0 = failed |
 
-The **realistic per-task cost** (headline metric) is reconstructed from these:
+The headline **cold** cost is reconstructed order-independently:
 
 ```
-ctx_in  = input + cache_creation + cache_read
-prefix  = ctx_in / num_turns
-realistic = prefix × (1.25 + 0.10 × (turns−1)) × $3/M + output × $15/M
+ctx_in = input + cache_creation + cache_read
+cold   = ctx_in × $3/M + output × $15/M
 ```
 
-This models a fresh session per task (cold between sessions) but cached within a task
-(consecutive turns in one CLI call). Full methodology: [`ANALYSIS.md`](ANALYSIS.md).
+A second **realistic** metric models a fresh session per task with caching within the task.
+It is reported alongside, with the caveat that it penalises turn reduction. Full methodology
+and both metrics: [`ANALYSIS.md`](ANALYSIS.md).

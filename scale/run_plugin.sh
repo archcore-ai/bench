@@ -128,7 +128,18 @@ run_one () {
     END_MS=$(python3 -c "import time; print(int(time.time()*1000))")
     DUR_MS=$((END_MS - START_MS))
 
-    if jq -e . "$out" >/dev/null 2>&1; then ok=1; break; fi
+    if jq -e . "$out" >/dev/null 2>&1; then
+      # A 403/429/5xx comes back as valid JSON with .api_error_status set and zero usage.
+      # Treat those as retryable (transient throttle) with linear backoff — do NOT record
+      # them as real rows. Max-turns flailing does NOT set api_error_status, so it still passes.
+      apistat=$(jq -r '.api_error_status // empty' "$out")
+      if [ -n "$apistat" ]; then
+        echo "  api_error $apistat batch${n} ${domain} ${arm} t${trial} (attempt $attempt) — backoff $((20 * attempt))s"
+        sleep $((20 * attempt))
+        continue
+      fi
+      ok=1; break
+    fi
     echo "  retry batch${n} ${domain} ${arm} t${trial} (attempt $attempt)"
   done
 
@@ -171,6 +182,7 @@ for n in $BATCH_SIZES; do
           prompt=$(build_c_prompt "$domain" "$n")
         fi
         run_one "$n" "$domain" "$arm" "$trial" "$prompt"
+        [ "${GAP:-0}" -gt 0 ] && sleep "$GAP"
       done
     done
   done

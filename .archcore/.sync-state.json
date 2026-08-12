@@ -51,6 +51,21 @@
       "source": "findings/plugin-pilot-v1.doc.md",
       "target": "findings/benchmark-results-v1.doc.md",
       "type": "related"
+    },
+    {
+      "source": "findings/benchmark-results-v2.doc.md",
+      "target": "findings/benchmark-results-v1.doc.md",
+      "type": "extends"
+    },
+    {
+      "source": "findings/benchmark-results-v2.doc.md",
+      "target": "methodology/benchmark-methodology.spec.md",
+      "type": "depends_on"
+    },
+    {
+      "source": "findings/benchmark-results-v2.doc.md",
+      "target": "findings/plugin-benchmark-v2.doc.md",
+      "type": "extends"
     }
   ]
 }

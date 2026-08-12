@@ -1,0 +1,5 @@
+batch_size,domain,arm,trial,n_correct,n_total,pass_rate,input_tokens,cache_creation,cache_read,output_tokens,total_cost_usd,num_turns,duration_ms,is_error
+"4","middleware","D","1","4","4","1.0000",13,16322,180109,1100,0.13177919999999999,12,"25175",0
+"4","middleware","C","1","4","4","1.0000",8,13815,109037,662,0.09447135000000001,7,"15415",0
+"4","middleware","D","2","4","4","1.0000",10,5695,157257,748,0.07978335,8,"20092",0
+"4","middleware","C","2","4","4","1.0000",11,6403,148688,701,0.07916565,8,"18596",0

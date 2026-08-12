@@ -66,23 +66,44 @@ across sequential `claude -p` runs, so raw billed cost is order-dependent. We ha
 
 Note the cold view exposes a real effect: retrieval needs a multi-turn loop, and each turn re-bills
 context. Preload answers in one turn. So retrieval is not "free." Under Claude Code's **lazy
-MCP-tool loading**, arm C's actual loop is `ToolSearch(search) → search → ToolSearch(get) → get →
-answer` = 5 turns — 2 of them (`ToolSearch`) are schema-load overhead the built-in Grep doesn't pay
-(verified post-hoc on CC 2.1.160; see `../rnd.md` and `../ANALYSIS.md` §3.4). A `mode=full` parameter
-on `search_documents` (returns the matched body inline) drops `get_document` from the loop → measured
-3 turns / $0.127, i.e. grep parity at equal quality (`../rnd.md` §9.4).
+MCP-tool loading**, arm C's loop on archcore v0.3.6 was `ToolSearch(search) → search →
+ToolSearch(get) → get → answer` = 5 turns — 2 of them (`ToolSearch`) schema-load overhead the
+built-in Grep doesn't pay.
+
+**Resolved in v0.7.0:** `search_documents(mode=full)` returns the matched body inline, dropping
+`get_document` and one schema-load turn from the loop → **measured 3 turns, in all 25 crossover
+runs**. What it bought is latency (12.0 s → 8.1 s per task, −33%) and turn count, **not tokens**:
+context processed went 142k → 144k and cold cost $0.432 → $0.437. Do not claim a token saving
+for `mode=full`.
+
+**Also measured in v2: the `realistic` metric penalises turn reduction.** With `ctx_in` fixed,
+fewer turns scores as more expensive (the formula assumes context is spread across turns at
+cache-read rates). Arm C's realistic cost "rose" $0.147 → $0.212 on identical token volume.
+Prefer the cold view when comparing arms whose turn counts differ a lot.
 
 ## Reproduce
 
 ```bash
-python3 gen_kb.py            # NDOCS=320 by default → kb/ + facts.csv (prints avg doc size)
-bash run.sh all              # crossover + workload → results/results.csv  (~80–100 min)
-python3 analyze.py results/results.csv > results/FINDINGS_SCALE.md
+python3 gen_kb.py                                                # NDOCS=320 → kb/ + facts.csv
+MAXTURNS=20 CSV=$PWD/results/results_v2.csv bash run.sh all      # crossover + workload (~2 h)
+python3 analyze_v2.py results/results_v2.csv results/results_v1.csv
 ```
-Knobs: `MODEL` (default sonnet), `XSIZES`, `XTRIALS` (5), `WTRIALS` (3), `WSIZE` (80), `NDOCS`.
+Knobs: `MODEL` (default sonnet), `XSIZES`, `XTRIALS` (5), `WTRIALS` (3), `WSIZE` (80), `NDOCS`,
+`MAXTURNS`.
 
-Pins: chi @ `3b171578`, archcore v0.3.6, claude 2.1.x, model=sonnet. Token counts are exact
-(`claude -p --output-format json` `.usage`); cold-session priced at Sonnet list ($3/M in, $15/M out).
+**Use `MAXTURNS=20`, not the default 12.** On Claude Code 2.1.228 the blind-grep arm needs 15–17
+turns on its worst runs; a cap of 12 truncates them, hides B3's tail, and flatters archcore.
+No arm exceeded 12 turns on the 2026-05-31 run, which is why the old default was safe then.
+
+Pins (current run, 2026-08-12): chi @ `3b171578`, **archcore v0.7.0**, plugin v0.7.1,
+**claude 2.1.228**, model=sonnet (resolves to sonnet-5). Previous run 2026-05-31: archcore
+v0.3.6, claude 2.1.16x, same model. Token counts are exact (`claude -p --output-format json`
+`.usage`); cold-session priced at Sonnet list ($3/M in, $15/M out).
+
+**Host-version sensitivity is a first-order effect.** Between those two Claude Code versions the
+grep baselines changed cost by 2.4–3.5× with no change to the KB, task, or model, and became
+bimodal (65% resolve in ≤2 turns / 35% spiral into 400k+ tokens). Arm C did not move (142k → 144k).
+Treat every cross-arm number as valid for a stated host version only.
 
 ## Isolation
 
@@ -106,9 +127,13 @@ Pins: chi @ `3b171578`, archcore v0.3.6, claude 2.1.x, model=sonnet. Token count
 
 ## Known limitations
 
-1. Single model (sonnet), single repo (chi). Convention-style single-fact tasks only.
+1. Single model (sonnet-5), single repo (chi). Convention-style single-fact tasks only.
 2. `B2`'s index is assumed perfectly maintained and free; in reality maintaining it has a cost
    Archcore avoids — not captured here.
-3. The bare agent drives the archcore MCP directly; the curated `/archcore:context` skill (one
-   `search(limit=50)` → top-5) may be more turn-efficient but isn't exercisable cleanly in headless.
+3. ~~The curated `/archcore:context` skill may be more turn-efficient but isn't exercisable
+   cleanly in headless.~~ **Moot as of plugin v0.7:** the skill was removed. Session context is
+   now injected by a SessionStart hook (~150-token corpus header, no document bodies) and was
+   measured directly — 120 runs, no effect on retrieval cost. See `run_plugin_v7.sh`.
 4. cold/warm bracket the cache effect but don't model intermediate session cadences.
+5. 5 trials per crossover cell is thin now that two arms are bimodal. Distribution claims should
+   rest on the workload phase (60 runs/arm); treat the crossover sweep as directional.

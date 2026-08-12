@@ -6,19 +6,93 @@
 > fixed quality bar — and if so, where exactly. This document gives every number and states
 > the honest conclusions, including the claims you are not allowed to make.
 
-Model: claude-sonnet-4-6. Token counts are exact, from `claude -p --output-format json` (`.usage`).
+Model: **claude-sonnet-5** (`--model sonnet`). Token counts are exact, from
+`claude -p --output-format json` (`.usage`).
+
+**Measured 2026-08-12** — archcore CLI **v0.7.0**, plugin **v0.7.1**, Claude Code **2.1.228**.
+Superseded run v1 (2026-05-31): archcore v0.3.6, plugin v0.6.x, Claude Code 2.1.16x, same model.
+Both runs are in the repo (`results_v1.csv` / `results_v2.csv`); every table below shows v1 → v2.
+
+---
+
+## Verdict
+
+### What was measured
+
+One thing: how many tokens an agent spends finding a fact in the project's documentation.
+Answer quality was not measured. Every access method answers equally correctly, which is built
+into the task design so that cost can be compared at equal results. This benchmark says nothing
+about whether Archcore makes answers better.
+
+### What moves the bill most
+
+| Change | Cost multiple | In dollars |
+|---|---|---|
+| Ask 8 questions in one session instead of 8 separate ones | **6.2×** | $0.462 → $0.074 per question |
+| Stop keeping all documentation in `CLAUDE.md` (1 doc vs 320) | 5.6× | $0.139 → $0.784 per task |
+| Switch to the cheapest search method (at 80 documents) | **1.3×** | $0.608 → $0.470 per task |
+
+The search method is the weakest of the three. Start with the rows above it.
+
+Batching was measured on Archcore only; the other methods were not run under batching. The
+mechanism behind it is general: a fixed per-session overhead is divided across the questions in
+that session.
+
+### Should you adopt Archcore to save money
+
+| Your situation | Answer |
+|---|---|
+| Fewer than 50 documents | No. `CLAUDE.md` or plain grep costs less. |
+| More than 100 to 150 documents | Yes. Cheaper than every other method. |
+| Somewhere in between | The difference is inside the margin of error. |
+| The worst case hurts more than the typical case | Yes, from 80 documents up. The only method that never blew up: 0 spikes in 60 runs against 22 for grep. |
+| Response time matters | Yes. 8.8 s on average against 16.3 s for grep, and 16.5 s at worst against 93 s. |
+
+On the typical task grep costs 2.5× less ($0.178 against $0.437). On the average task Archcore
+costs 23% less ($0.470 against $0.608). Both figures are correct and come from the same 60 runs.
+Grep finds the file immediately in two cases out of three, and in the rest it fans out into a long
+search that costs up to $2.40 per task.
+
+### Did v0.7 make Archcore cheaper
+
+No. It processed 142k tokens in May and 144k now, at $0.432 and $0.437. `mode=full` cut the number
+of round trips from 5 to 3 and removed 33% of the waiting time, but not the tokens.
+
+Its rank did change: in May it was the most expensive method, now it is the cheapest. The reason
+lies elsewhere. Claude Code 2.1.228 regressed `Grep` and `Read` on large knowledge bases, and the
+competing methods got 2.4× to 3.5× more expensive.
+
+### Does the plugin reduce cost
+
+No. Across all four batch sizes the number of round trips is identical and the price difference is
+at chance level. The plugin exists for the `document`, `plan`, and `review` commands, not to make
+search cheaper.
+
+---
+
+## 0. What changed since v1
+
+Three things moved at once, and only one of them is Archcore.
+
+| # | Change | Effect on the numbers |
+|---|--------|-----------------------|
+| 1 | **`search_documents(mode=full)` shipped** in CLI v0.7.0 | Arm C: 5 turns → **3 turns**. Token cost unchanged. Latency −33%. |
+| 2 | **`/archcore:context` was removed** in plugin v0.7 | The entire v1 Plugin benchmark measured a mechanism that no longer exists. Rebuilt from scratch — §3. |
+| 3 | **Claude Code 2.1.228 regressed Grep/Read on large KBs** | Baselines B2/B3 got 2.4–3.5× more expensive and became bimodal. **Not an Archcore improvement.** |
+
+The headline ranking flips between v1 and v2 — Archcore goes from most-expensive to
+cheapest on the workload suite. **Change #3 is the cause, not changes #1 or #2.** Archcore's
+own cost did not move: arm C processed 142k context tokens in v1 and 144k in v2.
 
 ---
 
 ## 1. Overview
 
-Two rigs:
-
-| Rig | Location | What it measures |
-|-----|----------|-----------------|
-| **Sanity** | `bench/` | 1-doc KB, 3 arms — proves measurement harness is correct |
-| **Scale — CLI** | `bench/scale/` | 320-doc KB, 5 arms, 305 runs — crossover + workload |
-| **Scale — Plugin** | `bench/scale/` | N=80 KB, D-arm + C-arm control, 120 runs — batch economics |
+| Rig | Location | What it measures | Runs |
+|-----|----------|-----------------|------|
+| **Sanity** | `bench/` | 1-doc KB, 3 arms — proves the harness is correct | — |
+| **Scale — CLI** | `bench/scale/` | 320-doc KB, 5 arms — crossover + workload | 305 |
+| **Scale — Plugin** | `bench/scale/` | N=80 KB, D-arm + C-arm control — v0.7 session context | 120 |
 
 ---
 
@@ -54,220 +128,278 @@ Exact-token grading: a correct answer means the knowledge was retrieved, not gue
 
 ### 2.3 Cost metric
 
-Three metrics, all reconstructed order-independently from the API response:
+Two metrics, both reconstructed order-independently from the API response. **Every conclusion
+below is checked against both**; where they disagree, that is stated explicitly.
 
-- **realistic (headline):** models a fresh session per task (cold between tasks — the
-  multi-session reality) but cached within a task (consecutive turns in one CLI call).
+- **cold:** `ctx_in × $3/M + output × $15/M`, where `ctx_in = input + cache_creation + cache_read`.
+  No turn model, no assumptions. Equals what an uncached session bills — every agent turn
+  re-sends the full context as fresh input. Models the multi-session regime.
+- **realistic:** models a fresh session per task, cached within the task.
   ```
-  ctx_in    = input_tokens + cache_creation + cache_read
   prefix    = ctx_in / num_turns
   realistic = prefix × (1.25 + 0.10 × (turns − 1)) × $3/M + output × $15/M
   ```
-- **cold:** `ctx_in × $3/M + output × $15/M` — upper bound; over-charges multi-turn arms.
-- **warm:** `total_cost_usd` — lower bound; understated by cross-run cache bleed.
 
-All tables below use the realistic metric. Cold/warm bounds: `scale/results/FINDINGS_SCALE_raw.md`.
+> **Caveat added in v2 — the realistic metric penalises turn reduction.** With `ctx_in` held
+> constant, *fewer* turns scores as *more* expensive: the formula assumes context is spread
+> across turns and discounted at cache-read rates. When `mode=full` cut arm C from 5 turns to
+> 3 at identical token volume, C's realistic cost rose $0.147 → $0.212 while its cold cost was
+> flat ($0.432 → $0.437). That is a modelling artifact, not a price increase. Prefer the cold
+> metric when comparing arms whose turn counts differ a lot.
+
+**Median vs mean.** v1 reported medians. In v2 the grep arms became bimodal (§2.6), and a
+median hides exactly the behaviour that decides what a suite costs. Both are reported; the
+mean is the number that lands on the invoice.
 
 ### 2.4 Crossover results
 
 Fixed anchor task; KB size sweeps N ∈ {1, 20, 80, 160, 320}; 5 arms; 5 trials per cell.
 
-| N (docs) | A cold | B1 preload | B2 index+grep | B3 blind grep | **C archcore** |
-|----------|--------|------------|---------------|---------------|----------------|
-| 1        | 0.204 ✗ | **0.102** | 0.111         | 0.103         | 0.127          |
-| 20       | 0.183 ✗ | 0.134     | **0.113**     | 0.121         | 0.127          |
-| 80       | 0.188 ✗ | 0.238     | **0.119**     | 0.123         | 0.127          |
-| 160      | 0.195 ✗ | 0.386     | 0.130         | **0.124**     | 0.127          |
-| 320      | 0.228 ✗ | 0.681     | 0.152         | **0.112**     | 0.127          |
+**cold $/task — median (v1 → v2):**
 
-✗ = task failed (Arm A has no access to the knowledge; pass 0–20%). Bold = cheapest arm.
+| N | A cold | B1 preload | B2 index+grep | B3 blind grep | **C archcore** |
+|---|--------|------------|---------------|---------------|----------------|
+| 1 | 0.832 → 0.458 ✗ | 0.081 → **0.139** | 0.164 → 0.569 | 0.244 → 0.174 | 0.433 → 0.434 |
+| 20 | 0.884 → 0.312 ✗ | 0.107 → **0.175** | 0.166 → 0.427 | 0.246 → 0.177 | 0.432 → 0.434 |
+| 80 | 0.857 → 0.443 ✗ | 0.190 → 0.290 | 0.175 → 0.297 | 0.252 → **0.184** | 0.432 → 0.441 |
+| 160 | 0.795 → 0.438 ✗ | 0.309 → 0.455 | 0.191 → 0.648 | 0.254 → 1.298 | 0.355 → **0.441** |
+| 320 | 1.078 → 0.591 ✗ | 0.545 → 0.784 | 0.224 → 0.741 | 0.254 → 1.350 | 0.432 → **0.435** |
 
-**Crossover points:**
+✗ = task failed (arm A has no access to the knowledge; pass 0/25). Bold = cheapest passing arm.
 
-| Comparison | N where C becomes cheaper |
-|---|---|
-| C vs B1 (preload) | **~27 docs** |
-| C vs B2 (index+grep) | ~272 docs |
-| C vs B3 (blind grep) | rough parity across range; B3 marginally cheaper |
+**Arm C is flat and deterministic.** Across all 25 crossover runs it used **exactly 3 turns**
+and 143–146k context tokens — every trial, every KB size. No other arm is stable:
+
+| Arm | Context tokens per trial (k), N=160 | N=320 |
+|-----|-------------------------------------|-------|
+| **C archcore** | `143, 144, 146, 146, 146` | `143, 143, 144, 144, 146` |
+| B1 preload | `152, 152, 152, 152, 152` | `261, 261, 261, 261, 261` |
+| B2 index+grep | `213, 213, 213, 264, 335` | `121, 244, 245, 304` |
+| B3 blind grep | `51, 60, 424, 555, 919` | `50, 109, 438, 561, 831` |
+
+B1 is stable too — it is preload, so its cost is deterministic by construction, and linear in N.
+
+**Crossover points — N where C becomes cheaper:**
+
+| Comparison | cold metric | realistic metric |
+|---|---|---|
+| C vs B1 (preload) | N ≈ 151 | N ≈ 12 |
+| C vs B2 (index+grep) | N ≈ 106 | N ≈ 95 |
+| C vs B3 (blind grep) | N ≈ 94 | N ≈ 86 |
+
+The two metrics disagree sharply on B1 (12 vs 151) because B1 answers in one turn and C in
+three — precisely the case where the turn model dominates. Quote the range, not one number.
+
+**Context-window note.** v1 flagged preload overflow as a risk. On sonnet-5's 1M window it is
+moot: B1 at 320 docs uses 261k tokens — 26% of the window. Preload's problem is now purely cost.
 
 ### 2.5 Workload results
 
-Fixed N=80; 20 tasks spanning all 5 domains; arms B2/B3/C; 3 trials. B1 omitted (from the
-crossover, at N=80 it would cost ~$0.24/task × 20 ≈ $4.8 — the worst). Arm A always fails.
+Fixed N=80; 20 tasks spanning all 5 domains; arms B2/B3/C; 3 trials = 60 measurements per arm.
 
-| Arm | Suite realistic $ | Pass rate | Median turns/task |
-|-----|-------------------|-----------|-------------------|
-| B3 — blind grep | **$2.294** | 100% | 3 |
-| B2 — index+grep | $2.375 | 100% | 2 |
-| C — archcore | $2.716 | 100% | 5 |
+**Per-task cost distribution (v2, cold):**
 
-All three answer every task correctly. B3 and B2 beat C by ~15% on suite cost.
+| Arm | n | median | **mean** | min | max | max/med | runs >2× med | turns | pass |
+|-----|---|--------|----------|-----|-----|---------|--------------|-------|------|
+| B3 blind grep | 60 | **0.178** | 0.608 | 0.143 | 2.400 | 13.5× | **22/60** | 1 | 60/60 |
+| B2 index+grep | 60 | 0.597 | 0.607 | 0.295 | 1.224 | 2.0× | 1/60 | 4 | 60/60 |
+| **C archcore** | 60 | 0.437 | **0.470** | 0.433 | 0.635 | 1.5× | **0/60** | 3 | 60/60 |
 
-### 2.6 Mechanism: turn count and the ToolSearch tax
+**By median, blind grep is 2.5× cheaper than Archcore. By mean, Archcore is 23% cheaper than
+both baselines.** Both statements are true; they describe the same 60 runs. The gap between
+them is the tail.
 
-What drives cost is the number of turns and what sits in context per turn:
+**Suite total — cost to answer all 20 tasks once:**
 
-| Arm | Turns | Context tokens (median, N=80) | Grows with N |
-|-----|-------|-------------------------------|--------------|
-| A cold | ~13 | ~352,000 | yes (digs through source) |
-| B1 preload | **1** | 27K → 182K | **linear** (carries whole KB) |
-| B2 index+grep | 2 | 54K–74K | near-flat |
-| B3 blind grep | 3 | 80K–84K | flat |
-| C archcore | **3** | **~93K** | **flat** |
+| Arm | cold, v1 | cold, v2 median-based | **cold, v2 mean-based** | realistic, v2 mean-based |
+|---|---|---|---|---|
+| B2 index+grep | 3.50 | 11.95 | 12.14 | 4.72 |
+| B3 blind grep | 5.04 | 3.56 | 12.17 | 5.05 |
+| **C archcore** | 8.64 | 8.73 | **9.40** | **4.31** |
 
-Arm C uses 3 turns: `ToolSearch(search_documents)` → `search_documents(mode=full)` → answer.
-The `search_documents` call with `mode=full` returns the matched document body inline, so a
-separate `get_document` call is not needed. This matches B3's 3-turn pattern.
+Median-based totals assume every task is the typical task — the assumption a bimodal arm
+violates. **Under both metrics, on expected cost, arm C is the cheapest arm.** In v1 it was
+the most expensive.
 
-Without `mode=full`, Arm C would use 5 turns (an additional `ToolSearch(get_document)` +
-`get_document`), because Claude Code loads MCP tool schemas lazily — each tool call is preceded
-by a schema-load turn. `mode=full` collapses retrieval to one MCP call, eliminating that overhead.
+**Latency (seconds per task, v2):**
 
-The always-on contribution of the archcore MCP (schemas, server instructions) is ~638 tokens/turn
-above the baseline, but this is a constant that cancels when comparing C to itself across N.
+| Arm | median | mean | max |
+|---|---|---|---|
+| B3 blind grep | **2.6** | 16.3 | **93.4** |
+| B2 index+grep | 12.3 | 12.6 | 26.8 |
+| **C archcore** | 8.1 | **8.8** | **16.5** |
+
+Same shape as cost: grep is fastest when it works and catastrophic when it doesn't.
+
+### 2.6 Mechanism
+
+**Why B3 blew up: it became bimodal.** Blind grep now resolves into two distinct populations:
+
+| Population | Share | Context | cold $ | Duration |
+|---|---|---|---|---|
+| "lucky" (≤2 turns) | 65% | 50k | 0.151 | 2 s |
+| "spiral" (>2 turns) | 35% | 438k | 1.338 | 32 s |
+
+In v1 there was no such split — B3 delivered 83k tokens in 3 turns on essentially every run.
+Under Claude Code 2.1.228 the agent either hits the right file immediately or fans out across
+dozens of candidates. **B2 degraded the same way despite holding a perfect, free index** —
+57k tokens/2 turns in v1 became 98–246k/2–5 turns at N=80. That an index-carrying arm regressed
+is the clearest evidence the cause is host behaviour, not retrieval strategy.
+
+**What `mode=full` actually bought.** Arm C, v1 → v2, workload:
+
+| | turns | context | cold $ | duration | output |
+|---|---|---|---|---|---|
+| v1 (v0.3.6) | 5 | 142k | 0.432 | 12.0 s | 396 tok |
+| v2 (v0.7.0) | **3** | 144k | 0.437 | **8.1 s** | 276 tok |
+
+`search_documents(mode=full)` returns the matched body inline, removing the `get_document`
+round-trip and one lazy-schema `ToolSearch` turn. It bought latency and turn count, not tokens:
+the same context is processed either way.
+
+**Baseline inflation is systemic.** B1 preload at N=1 went 27k → 46k context tokens; the
+Claude Code system prompt grew roughly 19k tokens between 2.1.16x and 2.1.228. That is a
+constant across arms and cancels in comparisons, but it means v1 and v2 absolute costs are
+not directly comparable — only within-run rankings are.
+
+**Methodology change: `MAXTURNS` 12 → 20.** In v1 no arm exceeded 12 turns. In v2, two B3 runs
+needed 15 and 17, so a cap of 12 would have cut them short and understated B3's cost.
 
 ---
 
 ## 3. Plugin Benchmark
 
-### 3.1 Methodology
+### 3.1 The v1 plugin benchmark measured a mechanism that no longer exists
 
-The Plugin adds `/archcore:context` to Claude Code via `--plugin-dir`. In headless `claude -p`
-sessions, the skill is invoked as the first line of the prompt:
+Through plugin v0.6, the D-arm prompt opened with `/archcore:context <domain>` — an explicit
+command that pulled an area's documents into the session up front. **Plugin v0.7 removed it.**
+Commands are now `document` / `init` / `plan` / `review`, none of which retrieve.
 
-```
-/archcore:context middleware
-
-For each question below, output ONLY the exact token value:
-1. [question]
-...
-```
-
-Two arms:
-
-- **D-arm (Plugin):** `--plugin-dir /path/to/plugin` + `/archcore:context <domain>` prefix
-- **C-arm (batch control):** same N questions, no plugin, one `claude -p` call
-
-Baseline: **C-separate** = one `claude -p` call per question (CLI measurement, $0.127/question).
-
-**Design:** 3 trials × 5 domains × 4 batch sizes (N ∈ {1, 2, 4, 8}) × 2 arms = **120 measurements**.
-100% pass rate across all conditions.
-
-### 3.2 Session amortization mechanism
-
-The fixed per-session overhead — MCP tool schemas, plugin skill instructions, Claude Code system
-prompt, source context — totals ~88–190k tokens depending on arm. This overhead is charged once
-(cache-creation on turn 1) and cached on all subsequent turns within the session (cache-read at
-0.10× rate). When N questions are batched in one session:
+Context now arrives a different way: a **SessionStart hook** injects a corpus header into every
+session automatically — document counts, branch, tag vocabulary, and a pointer to the MCP tools.
+Roughly 150 tokens, and **no document bodies**:
 
 ```
-total_cost(N) ≈ overhead_cost + N × marginal_cost_per_answer
-per_question(N) = total_cost(N) / N
+[Archcore — Git-native context for AI coding agents]
+You have MCP tools available: list_documents, get_document, search_documents, ...
+CORPUS: 80 documents — knowledge 80 · accepted 80
+BRANCH: main
+EXISTING TAGS: errors, logging, middleware, routing, testing, error, test, log, ...
 ```
 
-Marginal cost per additional question is ~$0.002–0.005 (output tokens only). As N grows,
-per-question cost converges toward this marginal cost, regardless of the large fixed overhead.
+This is a routing hint, not a preload. §3 was therefore rebuilt from scratch;
+`scale/run_plugin.sh` is kept unchanged so the v1 numbers stay reproducible, and the new
+driver is `scale/run_plugin_v7.sh`.
 
-**D-arm turn count:** The `/archcore:context` skill calls `search_documents` without `mode=full`,
-returning top-5 excerpts. Answer tokens are in the Decision section and do not appear in excerpts,
-so the model calls `get_document` per question (~2 turns each). At N=4: 3 turns for context load
-+ 8 turns for 4 questions + 1 answer turn = ~12 turns.
+### 3.2 New design
 
-**C-arm turn count:** The model calls `search_documents(mode=full)` to retrieve all matching
-document bodies inline, answering all N questions in one shot → 5 turns regardless of N.
+- **D-arm:** `--plugin-dir …/plugins/archcore` → SessionStart injection + skills + hooks
+- **C-arm:** no plugin, same archcore MCP server (control)
+- **Both arms get an identical prompt.** In v0.7 the plugin's contribution is ambient rather
+  than prompt-level, so any delta is attributable to it alone.
 
-Why D-arm beats C-arm at N≥4 in the realistic metric: with 12 turns, D's per-turn prefix is
-~14k tokens (11 turns at 0.10× cache-read rate). With 5 turns, C's per-turn prefix is ~18k
-tokens (4 turns at cache-read rate). The cache model favors more turns; at N≥4 this outweighs
-D's higher absolute context.
+Verified before measuring: the hook does fire in headless `-p` mode (D quotes the `CORPUS`
+line verbatim; C answers `NONE`), so the control is clean and no globally-installed plugin
+leaks into C.
 
-### 3.3 Per-question cost by batch size
+The KB is a v0.7-conformant copy of the N=80 arm — four uppercase acronym tags lowercased so
+`archcore status` reports a clean project. All 80 fact tokens and all 40 plugin-task tokens
+verified intact; the diff against the CLI arm is 8 tag lines. Retrieval difficulty is unchanged.
 
-**Aggregate table — median over 3 trials, all 5 domains:**
+Design: 3 trials × 5 domains × 4 batch sizes (N ∈ {1,2,4,8}) × 2 arms = **120 measurements**,
+0 errors, 100% pass rate.
 
-| N questions/session | D-arm $/q | D IQR | C-arm $/q | C IQR | D/C ratio | saving vs C-sep |
-|---------------------|-----------|-------|-----------|-------|-----------|-----------------|
-| 1 | $0.163 | ±0.034 | $0.150 | ±0.001 | 1.09 | D: −29%, C: −18% |
-| 2 | $0.075 | ±0.007 | $0.067 | ±0.014 | 1.13 | D: −41%, C: −47% |
-| 4 | $0.032 | ±0.001 | $0.033 | ±0.008 | 0.97 | D: **−74%**, C: **−74%** |
-| 8 | $0.015 | ±0.000 | $0.014 | ±0.009 | 1.05 | D: −88%, C: −89% |
+### 3.3 Result: the plugin has no measurable effect on retrieval cost
 
-Note: at N=1, both arms are more expensive than C-separate ($0.127). C-separate uses an
-optimized 3-turn session for a single question; batch N=1 carries extra session overhead.
+| Batch | Arm | cold $/question (median) | mean | [min–max] | turns | context |
+|---|---|---|---|---|---|---|
+| 1 | C | 0.4606 | 0.4625 | [0.447–0.493] | 3 | 151k |
+| 1 | **D** | 0.4594 | 0.4607 | [0.454–0.473] | 3 | 151k |
+| 2 | C | 0.2313 | 0.2399 | [0.226–0.323] | 4 | 151k |
+| 2 | **D** | 0.2382 | 0.2551 | [0.229–0.331] | 4 | 156k |
+| 4 | C | 0.1257 | 0.1303 | [0.117–0.164] | 6 | 166k |
+| 4 | **D** | 0.1277 | 0.1334 | [0.117–0.164] | 6 | 168k |
+| 8 | C | 0.0834 | 0.0748 | [0.060–0.089] | 10 | 216k |
+| 8 | **D** | 0.0653 | 0.0733 | [0.061–0.091] | 10 | 170k |
 
-**Workload equivalent — 20 tasks (5 domains × 4 questions per domain):**
+**Turn counts are identical at every batch size.** Paired by (domain, trial), D is cheaper in
+8/15, 3/15, 7/15, 8/15 pairs at N = 1/2/4/8 — a coin flip, with the one deviation running
+*against* the plugin. Paired median context delta is −82 / +2,444 / +73 / −11 tokens: at the
+same order of magnitude as the ~150-token injection, i.e. indistinguishable from noise.
 
-| Strategy | Total cost | vs C-sep 20×1 |
-|----------|-----------|---------------|
-| C-separate 20×1 | $2.540 | baseline |
-| D-batch 5×4 | **$0.649** | **−74%** |
-| C-batch 5×4 | $0.722 | −72% |
+**The injected corpus header does not change how the model retrieves.** It announces what
+exists; the model still runs the same search-and-read loop.
 
-D-batch is 10% cheaper than C-batch on the full suite.
+### 3.4 Session batching still works — but it was never the plugin's doing
 
-### 3.4 D vs C by domain at batch size 4
+| Questions/session | cold $/question (mean, both arms) | vs N=1 |
+|---|---|---|
+| 1 | 0.461 | baseline |
+| 2 | 0.248 | −46% |
+| 4 | 0.132 | −71% |
+| 8 | 0.074 | **−84%** |
 
-| Domain | D-arm $/q | C-arm $/q | Winner | Δ |
-|--------|-----------|-----------|--------|---|
-| middleware | $0.033 | $0.033 | D | 1% |
-| routing | $0.033 | $0.033 | D | 1% |
-| errors | $0.032 | $0.041 | **D** | **20%** |
-| logging | $0.032 | $0.033 | D | 3% |
-| testing | $0.032 | $0.041 | **D** | **21%** |
-
-The Plugin wins all 5 domains. For `errors` and `testing` (ADR-type documents with complex
-topic phrasing), D-arm is 20–21% cheaper — the context skill's curated overview helps the model
-locate the correct documents without extra search iterations.
-
-**Cost consistency:** D-arm IQR = $0.001/q at N=4; C-arm IQR = $0.008/q — Plugin is 8× more
-consistent across domains and trials.
+Fixed session overhead — MCP schemas, system prompt, source context — is charged once and
+amortised across every question in the session. **Both arms get this equally.** In v1 this
+saving was reported in the Plugin section and read as a plugin benefit; it is a property of
+batching questions into one session, available with or without the plugin.
 
 ---
 
 ## 4. Comparison: CLI vs Plugin
 
-| | CLI separate | Plugin N=1 | Plugin N=4 | Plugin N=8 |
-|--|---|---|---|---|
-| Cost/question (realistic) | $0.127 | $0.163 | $0.032 | $0.015 |
-| vs CLI | baseline | +29% | −74% | −88% |
-| Turns | 3 | 6 | 12 | 20 |
-| Full 20-task suite | $2.54 | — | $0.649 | ~$0.31 |
-| IQR/question | — | ±0.034 | ±0.001 | — |
-| Best for | one-off lookups, scripts | — | sessions (4+ q/area) | long sessions |
+| | CLI, 1 question/session | Batched, 4 q/session | Batched, 8 q/session |
+|--|---|---|---|
+| cold $/question | 0.461 | 0.132 | 0.074 |
+| Turns | 3 | 6 | 10 |
+| Plugin changes this? | no | no | no |
 
-**CLI wins when:** one question per run, scripted pipelines, or session structure is not possible.
-Its $0.127/question cost is fixed, predictable, and independent of KB size.
-
-**Plugin wins when:** a developer asks 4+ questions about the same area in one session. The cost
-structure inverts — the fixed overhead becomes a fixed amortization budget. At N=8 per session,
-cost reaches $0.015/question (88% lower than CLI-separate).
+**Use batching when you can**: 4+ questions about one area in a single session is a 71–84%
+per-question saving. **Load the plugin for what it now does** — `document` / `plan` / `review`
+workflows and the authoring hooks — not for retrieval economics, where it is cost-neutral.
 
 ---
 
-## 5. Claims
+## 5. What the data shows, and what it does not
 
-### CLI
+### Supported by the measurements
 
-- ✅ **CAN:** "Archcore keeps per-task cost flat as the KB grows; `CLAUDE.md` preload grows
-  linearly. Beyond ~27 docs Archcore is cheaper; at 320 docs it is 4.6× cheaper."
-- ✅ **CAN:** "Archcore is at parity with 'markdown files + grep' on per-task cost and requires
-  no index maintenance."
-- ✅ **CAN:** "Archcore achieves 100% task success across all KB sizes and all conditions."
-- ❌ **CANNOT:** "Archcore saves tokens vs any baseline." It does not beat well-maintained grep.
-- ❌ **CANNOT:** "Results generalize to real KBs." Tasks use non-derivable answer tokens —
-  harder than most real lookups where partial context is informative.
+- Archcore's retrieval cost is flat and deterministic as the KB grows: 3 turns and 143–146k
+  context tokens at every size from 1 to 320 documents, across 25 runs. This is the most
+  strongly supported result here.
+- On a 20-task suite at 80 documents, Archcore has the lowest expected cost of any method, 23%
+  below both grep baselines, because it has no tail: 0 of 60 runs above 2× median against 22 of
+  60 for blind grep. This holds under both cost metrics.
+- Archcore answered every task correctly at every KB size and in every condition.
+- `CLAUDE.md` preload grows linearly with KB size and Archcore does not. Past roughly 100 to 150
+  documents Archcore is cheaper. The two metrics disagree on the exact point, so the range is
+  the honest form of this statement (§2.4).
+- Batching 4 to 8 questions about one area into a single session cuts per-question cost by 71%
+  to 84%, across 120 measurements.
 
-### Plugin
+### Not supported
 
-- ✅ **CAN:** "Session batching of 4+ questions per area saves 74% per question vs separate
-  calls. Holds across all 5 domains, 3 trials, 100% pass rate."
-- ✅ **CAN:** "Plugin matches or beats raw MCP at N=4 across all domains. For ADR-type
-  documents, Plugin is 20% cheaper than raw MCP at N=4."
-- ✅ **CAN:** "Plugin provides 8–12× tighter cost variance per question vs raw MCP batch."
-- ❌ **CANNOT:** "Plugin saves tokens for single-question sessions" — it costs 29% more.
-- ❌ **CANNOT:** "Plugin context skill improves retrieval efficiency per document." The skill
-  returns curated excerpts (top-5, no full bodies); the model still calls get_document for
-  exact lookups. The savings come from session amortization, not faster retrieval.
+- **Archcore did not get cheaper in v0.7.** Its cost went from 142k to 144k tokens, $0.432 to
+  $0.437. The ranking changed because the baselines regressed under Claude Code 2.1.228.
+- **Archcore does not beat grep on the typical task.** By median, blind grep is 2.5× cheaper at
+  80 documents. The Archcore advantage is in expected cost and in variance.
+- **`mode=full` does not save tokens.** It saves a round trip and 33% of the latency at identical
+  token volume.
+- **The plugin does not reduce retrieval cost.** Four batch sizes, identical turn counts, paired
+  wins at chance level, context delta within noise. The two v1 plugin claims (10% cheaper at
+  N=4, tighter cost variance) described `/archcore:context`, which no longer exists.
+
+### Out of scope entirely
+
+- **Answer quality.** Every method that carries the knowledge answers correctly, by construction,
+  so cost can be compared at equal results. Nothing here shows whether Archcore makes answers
+  better, only what retrieval costs.
+- **Multi-document reasoning, relations, drift, and governance.** All tasks are single-fact
+  lookups. The features Archcore is mostly adopted for are not exercised.
+- **Generalisation to real knowledge bases.** Answer tokens are deliberately non-derivable,
+  which is harder than most real lookups, where partial context already helps.
+- **Stability across host versions.** Every baseline comparison depends on Claude Code's
+  Grep/Read behaviour, which changed materially inside one minor-version range.
 
 ---
 
@@ -275,14 +407,18 @@ cost reaches $0.015/question (88% lower than CLI-separate).
 
 1. **Synthetic KB with non-derivable answer tokens** — a harder task than most real lookups.
    Real KBs with topic-adjacent answers may show different arm rankings.
-2. **Single model (sonnet), single repo (chi).** Single-fact convention tasks only; no
+2. **Single model (sonnet-5), single repo (chi).** Single-fact convention tasks only; no
    multi-document synthesis, no use of Archcore's relations or governance features.
-3. **B2 index assumed perfectly maintained and free** — the hardest baseline for Archcore.
-   In practice, maintaining a curated index has a real cost; this benchmark does not price it.
-4. **Plugin batch: 5 domains measured, 3 trials each.** ADR-heavy KBs may show larger Plugin
-   advantage; simpler rule-only KBs may show smaller advantage.
-5. **Realistic metric is a reconstruction** — assumes ~constant per-turn prefix; cold/warm
-   bounds are in `scale/results/FINDINGS_SCALE_raw.md`.
+3. **B2's index is assumed perfectly maintained and free** — the hardest baseline for Archcore.
+   Maintaining a curated index has a real cost this benchmark does not price.
+4. **Host-version sensitivity is now a first-order effect.** Between Claude Code 2.1.16x and
+   2.1.228, the grep baselines changed cost by 2.4–3.5× with no change to the KB, the task, or
+   the model. Treat every cross-arm number as valid for a stated host version only.
+5. **5 trials per crossover cell is thin for bimodal arms.** The workload phase (60 per arm)
+   is the reliable basis for distribution claims; the crossover phase is directional.
+6. **The realistic metric penalises turn reduction** (§2.3) — prefer cold when turn counts differ.
+7. **v1 and v2 absolute costs are not comparable** — the host system prompt grew ~19k tokens.
+   Compare rankings within a run, not dollar figures across runs.
 
 ---
 
@@ -292,17 +428,20 @@ cost reaches $0.015/question (88% lower than CLI-separate).
 
 ```bash
 cd scale
-python3 gen_kb.py                        # 320 docs + facts.csv
-bash run.sh all                          # crossover + workload (~90 min)
-python3 analyze.py results/results.csv   # tables + charts
+python3 gen_kb.py                                     # 320 docs + facts.csv
+MAXTURNS=20 CSV=$PWD/results/results_v2.csv bash run.sh all      # ~2 h, 305 runs
+python3 analyze_v2.py results/results_v2.csv results/results_v1.csv
 ```
 
 ### Plugin
 
 ```bash
-bash scale/run_plugin.sh   # 3 trials × 5 domains × 4 batch sizes × 2 arms
-# Raw output: scale/results/plugin_results.csv
+PLUGIN=/path/to/plugin bash scale/run_plugin_v7.sh    # ~50 min, 120 runs
+# Raw output: scale/results/plugin_results_v7.csv
 ```
+
+`run_plugin_v7.sh` resolves both plugin layouts (v0.7 `plugins/archcore/`, and the pre-0.7
+repo root) and builds its own v0.7-conformant arm.
 
 ---
 
@@ -310,21 +449,23 @@ bash scale/run_plugin.sh   # 3 trials × 5 domains × 4 batch sizes × 2 arms
 
 ```
 bench/
-├── README.md                 ← marketing overview + reproduce steps
-├── SUMMARY.md                ← 5-minute summary (CLI + Plugin)        · SUMMARY.ru.md
+├── README.md                 ← overview + reproduce steps
+├── SUMMARY.md                ← 5-minute summary                       · SUMMARY.ru.md
 ├── ANALYSIS.md               ← this document                          · ANALYSIS.ru.md
 ├── harness/bench.sh          ← sanity rig (3 arms, 1 doc, 1 task)
 ├── results/FINDINGS.md       ← sanity results
 └── scale/
     ├── README.md                 ← scale rig design
-    ├── gen_kb.py / build_arm.py / grade.py / run.sh / analyze.py
-    ├── run_plugin.sh             ← plugin benchmark driver
-    ├── grade_batch.py            ← multi-answer grader
+    ├── gen_kb.py / build_arm.py / grade.py / run.sh
+    ├── analyze.py                ← v1 analyzer (medians)
+    ├── analyze_v2.py             ← v2 analyzer (median + mean + tail frequency)
+    ├── run_plugin.sh             ← v1 plugin driver (/archcore:context — kept for reproducibility)
+    ├── run_plugin_v7.sh          ← v2 plugin driver (SessionStart mechanism)
     ├── plugin_tasks.json         ← batch task groups (5 domains × 8 questions)
     ├── facts.csv                 ← KB metadata (question, answer_token, domain)
-    ├── FINDINGS_SCALE.md         ← scale CLI findings                 · FINDINGS_SCALE.ru.md
     └── results/
-        ├── results.csv           ← 305 CLI measurements
-        ├── plugin_results.csv    ← 120 plugin measurements
-        └── FINDINGS_SCALE_raw.md ← full tables (cold/warm bounds, token/turn breakdown)
+        ├── results_v1.csv        ← 305 CLI measurements (2026-05-31, archcore v0.3.6)
+        ├── results_v2.csv        ← 305 CLI measurements (2026-08-12, archcore v0.7.0)
+        ├── plugin_results.csv    ← 120 plugin measurements (v1 mechanism)
+        └── plugin_results_v7.csv ← 120 plugin measurements (v0.7 mechanism)
 ```
